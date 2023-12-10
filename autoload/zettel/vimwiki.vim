@@ -844,8 +844,8 @@ function! zettel#vimwiki#find_files(wiki_nr, directories_only, ...) abort
 endfunction
 
 " based on vimwikis "get wiki links", not stripping file extension
-function! zettel#vimwiki#get_wikilinks(wiki_nr, also_absolute_links)
-  let files = zettel#vimwiki#find_files(a:wiki_nr, 0)
+function! zettel#vimwiki#get_wikilinks(wiki_nr, also_absolute_links, pattern) abort
+  let files = vimwiki#base#find_files(a:wiki_nr, 0, a:pattern)
   if a:wiki_nr == vimwiki#vars#get_bufferlocal('wiki_nr')
     let cwd = vimwiki#path#wikify_path(expand('%:p:h'))
   elseif a:wiki_nr < 0
@@ -887,22 +887,43 @@ endfunction
 
 
 " based on vimwikis "generate links", adding the %title to the link
-function! zettel#vimwiki#generate_links()
-  let lines = []
+function! zettel#vimwiki#generate_links(create, ...)
+  if a:0
+    let s:pattern = a:1
+  else
+    let s:pattern = ''
+  endif
 
-  let links = zettel#vimwiki#get_wikilinks(vimwiki#vars#get_bufferlocal('wiki_nr'), 0)
-  call reverse(sort(links))
+  let GeneratorLinks = copy(l:)
+  function! GeneratorLinks.f() abort
+    let lines = []
+   
+    let links = zettel#vimwiki#get_wikilinks(vimwiki#vars#get_bufferlocal('wiki_nr'), 0, s:pattern)
+    call reverse(sort(links))
+  
+    let bullet = repeat(' ', vimwiki#lst#get_list_margin()) . vimwiki#lst#default_symbol().' '
+    for link in links
+      let abs_filepath = vimwiki#path#abs_path_of_link(link)
+      "let abs_filepath = link
+      "if !s:is_diary_file(abs_filepath)
+        call add(lines, bullet.
+              \ zettel#vimwiki#get_link(abs_filepath))
+      "endif
+    endfor
+  
+    return lines
+  endfunction
 
-  let bullet = repeat(' ', vimwiki#lst#get_list_margin()) . vimwiki#lst#default_symbol().' '
-  for link in links
-    let abs_filepath = vimwiki#path#abs_path_of_link(link)
-    "let abs_filepath = link
-    "if !s:is_diary_file(abs_filepath)
-    call add(lines, bullet.
-          \ zettel#vimwiki#get_link(abs_filepath))
-    "endif
-  endfor
-  call s:insert_link_array(g:zettel_generated_index_title, lines, g:zettel_generated_index_title_level)
+  let links_rx = '\%(^\s*$\)\|\%('.vimwiki#vars#get_syntaxlocal('rxListBullet').'\)'
+
+  call vimwiki#base#update_listing_in_buffer(
+        \ GeneratorLinks,
+        \ vimwiki#vars#get_global('links_header'),
+        \ links_rx,
+        \ line('$')+1,
+        \ vimwiki#vars#get_global('links_header_level'),
+        \ a:create)
+
 endfunction
 
 function! s:is_markdown()
